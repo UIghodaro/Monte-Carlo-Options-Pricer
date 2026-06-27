@@ -18,11 +18,11 @@ double CDF(double x) {
 //      T - Time till expiry date                                                         [Fixed under European]
 //  Sigma - Volatility of a stock, that is, the standard deviation/variance of the stock from some mean price (Normal distribution) [Assume Fixed] 
 
-
-double blackScholesCall(double S, double K, double r, double T, double sigma) {
+// Full equation is C = S*CDF(d1) - K*exp(-rT)*CDF(d2) where d1 and d2 are measures affected mainly by stock price and its standard deviation sigma (I say mainly as K is fixed under European, based on T, so ln(S/K) only varies by dS)
+double BlackScholesMertonCall(double S, double K, double r, double T, double sigma) {
     // Needs to calculate d1, d2, their CDFs, then you can just plug in numbers? Or am I allowing time variation?
 
-    double BSout;                                                   // Eventual output
+    double BSM;                                                   // Eventual output
 
     double visor = sigma*std::sqrt(T);                              // Separate out here due to being involved in both
 
@@ -32,13 +32,21 @@ double blackScholesCall(double S, double K, double r, double T, double sigma) {
     double d2 = d1 - visor;
 
     // Use the CDF function with these to compute Black-Scholes
-    BSout = S*CDF(d1) - K*std::exp(-r*T)*CDF(d2);
+    BSM = S*CDF(d1) - K*std::exp(-r*T)*CDF(d2);
     
-    return BSout;
+    return BSM;
 }
 
+// Letting N being number of Monte-Carlo epochs
+// This needs to use the fundamental Brownian motion equation which the Black-Scholes-Merton equation finds the closed form expectation of
+// Monte-Carlo methods just abuses the Law of Large Numbers
 
-int main() {
-    std::cout << "The Black-Scholes output of this configuration is: " << blackScholesCall(1,1,1,1,1) << std::endl;
+// We use the GBM equation: S(T) = S(0)*exp()
+double monteCarloCall(double S, double K, double r, double T, double sigma, int N) {
+    return 0;
+}
+
+int main(double S, double K, double r, double T, double sigma) {
+    std::cout << "The Black-Scholes-Merton output of this configuration is: " << BlackScholesMertonCall(1,1,1,1,1) << std::endl;
     return 0;
 }
