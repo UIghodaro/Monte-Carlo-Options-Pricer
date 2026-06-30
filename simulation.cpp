@@ -9,8 +9,11 @@
 #include <thread>
 #include <vector>      
 
-// Testing
+// Testing and Export
 #include <chrono>
+#include <fstream>
+#include <sstream>
+#include <string>
 
 // compilation: g++ -O3 -o simulation.out simulation.cpp 
 // running:     ./simulation.out
@@ -120,7 +123,6 @@ double threadPoolMonteCarlo(double S, double K, double r, double T, double sigma
     unsigned int numThreads = std::thread::hardware_concurrency();  // Draw threads from available hardware
     std::vector<double> partials(numThreads, 0.0);                  // Initialise a vector with length numThreads, set each index to 0.0
     std::vector<std::thread> workers;                               // Start a thread vector
-    std::cout << "There are " << numThreads << " threads available" << std::endl;
 
     int chunkSize = N / numThreads;
 
@@ -175,7 +177,33 @@ double threadPoolMonteCarlo(double S, double K, double r, double T, double sigma
 // Side thing - Visualise the convergence
 // ==========================================
 
-// Just export it to a CSV and then visualise using a python file
+// Just export it to a CSV and then visualise using a matplotlib, no use using cpp
+
+struct Entry {
+    std::string epochs;
+    std::string call;
+};
+
+// Ascending powers of 10 for epochs
+void visualiseConverge(double S, double K, double r, double T, double sigma, int power) {
+
+    int N = 1;
+    std::vector<Entry> entries;
+
+    for(int i = 0; i < power+1; i++) {
+        for (int mult : {1, 2, 5}) {
+            int N = mult * std::pow(10, i);
+            entries.push_back({std::to_string(N), std::to_string(threadPoolMonteCarlo(S,K,r,T,sigma,N))});
+        }
+    }
+
+    std::ofstream csvFile("out.csv");
+    for (const auto& entry : entries) {
+        csvFile << entry.epochs << "," << entry.call << "\n";
+    }
+
+    csvFile.close();
+}
 
 // ==========================================
 // Main, printing output and presenting error
@@ -191,6 +219,8 @@ int main() {
     // Configurable inputs
     double S = 1; double K = 1; double r = 1; double T = 1; double sigma = 1; 
     int N = 100000000; // default of 100 million
+
+    std::cout << "There are " << std::thread::hardware_concurrency() << " threads available" << std::endl;
 
     // Computing values, their compute times and error
     auto BSMs  = high_resolution_clock::now();
@@ -212,8 +242,16 @@ int main() {
 
     std::cout << "The Black-Scholes-Merton output of this configuration is: " << BSM << " in " << ms1.count() << "ms\n";
     std::cout << "The Monte-Carlo output of this configuration over " << N << " epochs is: " << MCM << " in " << ms2.count() << "ms [Error = " << acc1 << "]\n";
-    std::cout << "The TP Monte-Carlo output of this configuration over " << N << " epochs is: " << TPMCM << " in " << ms3.count() << "ms [Error = " << acc2 << "]\n";
+    std::cout << "The TP Monte-Carlo output of this configuration over " << N << " epochs is: " << TPMCM << " in " << ms3.count() << "ms [Error = " << acc2 << "]\n ... \n";
     
+    // Get visualiser csv
+    auto t1 = high_resolution_clock::now();
+    visualiseConverge(S, K, r, T, sigma, 8);
+    auto t2 = high_resolution_clock::now();
+    auto ms = duration_cast<milliseconds>(t2-t1);
+
+    std::cout << "Datapoints CSV generated in " << ms.count() << "ms\n";
+
     /* Getting number of milliseconds as a double. */
     // duration<double, std::milli> ms_double = t2 - t1;
 
