@@ -46,7 +46,7 @@ double BlackScholesMertonCall(double S, double K, double r, double T, double sig
 
     // Complete sigma^2 as sigma*sigma to avoid excess library calls? After studying compiler design this just makes more sense
     // Can't do log this way sadly
-    double d1 = (std::log(S/K) + (r + T*(sigma*sigma / 2)))/visor;
+    double d1 = (std::log(S/K) + T*(r + (sigma*sigma / 2)))/visor;
     double d2 = d1 - visor;
 
     // Use the CDF function with these to compute Black-Scholes
@@ -130,15 +130,21 @@ double threadPoolMonteCarlo(double S, double K, double r, double T, double sigma
 
     // Worker logic
     for(unsigned int t = 0; t < numThreads; t++){
+        
+        // The following is implemented for the case where chunk size is not a clean division
+        int start = t * chunkSize;                                  // Start of a worker thread's set of epochs to do                           
+        int end = (t == numThreads - 1) ? N : start + chunkSize;    // End of a worker thread's set of epochs to do, if it is the final thread, take it all the way to N
+        int threadEpochs = end - start;                             // actual number
 
-        workers.push_back(std::thread([&, t]() {
+        // Pass t and threadEpochs into each thread since each thread uses them, right?
+        workers.push_back(std::thread([&, t, threadEpochs]() {
             std::random_device rd;
             std::mt19937 gen(rd());                                                 
             std::normal_distribution<double> dist(0, 1);                           
     
             double p_accum = 0.0;
 
-            for (int i = 0; i < chunkSize; i++) {
+            for (int i = 0; i < threadEpochs; i++) {
                 double Z = dist(gen);
                 p_accum += std::fmax(outerMult*std::exp(innerMult*Z) - K, 0);
             }
@@ -166,6 +172,12 @@ double threadPoolMonteCarlo(double S, double K, double r, double T, double sigma
 }
 
 // ==========================================
+// Side thing - Visualise the convergence
+// ==========================================
+
+// Just export it to a CSV and then visualise using a python file
+
+// ==========================================
 // Main, printing output and presenting error
 // ==========================================
 
@@ -178,7 +190,7 @@ int main() {
 
     // Configurable inputs
     double S = 1; double K = 1; double r = 1; double T = 1; double sigma = 1; 
-    int N = 100000000; 
+    int N = 100000000; // default of 100 million
 
     // Computing values, their compute times and error
     auto BSMs  = high_resolution_clock::now();
@@ -209,7 +221,7 @@ int main() {
 }
 
 
-// Other stuff
+// Previously used outputs, visualising the convergence increase over number of epochs
     //std::cout << "The Monte-Carlo output of this configuration over 1000 epochs is: " << monteCarloCall(S, K, r, T, sigma, 1000) << "\n";
     //std::cout << "The Monte-Carlo output of this configuration over 10000 epochs is: " << monteCarloCall(S, K, r, T, sigma, 10000) << "\n";
     //std::cout << "The Monte-Carlo output of this configuration over 100000 epochs is: " << monteCarloCall(S, K, r, T, sigma, 100000) << "\n";
