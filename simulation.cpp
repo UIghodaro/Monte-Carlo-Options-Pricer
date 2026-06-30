@@ -259,7 +259,7 @@ int main() {
 }
 
 
-// Previously used outputs, visualising the convergence increase over number of epochs
+// Previously used outputs, visualising the convergence increase over number of epochs (in terminal) 
     //std::cout << "The Monte-Carlo output of this configuration over 1000 epochs is: " << monteCarloCall(S, K, r, T, sigma, 1000) << "\n";
     //std::cout << "The Monte-Carlo output of this configuration over 10000 epochs is: " << monteCarloCall(S, K, r, T, sigma, 10000) << "\n";
     //std::cout << "The Monte-Carlo output of this configuration over 100000 epochs is: " << monteCarloCall(S, K, r, T, sigma, 100000) << "\n";
