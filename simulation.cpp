@@ -1,9 +1,25 @@
+// Baseline
 #include <iostream>
-#include <cmath>
-#include <random>                                          
+
+// Mathematics 
+#include <cmath>        
+#include <random>   
+
+// Threadpool
+#include <thread>
+#include <vector>      
+
+// Testing
+#include <chrono>
 
 // compilation: g++ -O3 -o simulation.out simulation.cpp 
 // running:     ./simulation.out
+
+// =========================================
+// 1. Black-Scholes closed-form equation
+// =========================================
+
+// The overarching options-pricing aim. The goal in any market is estimating the best cost of a stock to make profit - or at least to not get cooked
 
 // Quickly implement CDF for Black-Scholes computation
 // The error function is included in cmath, use its relationship with the cdf to not need to use other library calls
@@ -12,7 +28,7 @@ double CDF(double x) {
     return out;
 }
 
-// Black-Scholes closed-form equation
+
 // Computes the value of a call option using:
 //      S - Stock price, 'the value of the stock at a time t' 
 //      K - Exercise/Strike price, 'how much we must pay for the option at expiry time T' [Fixed]
@@ -39,6 +55,12 @@ double BlackScholesMertonCall(double S, double K, double r, double T, double sig
     return call;
 }
 
+// =========================================
+// 2. Monte-Carlo method approximation
+// =========================================
+
+// We will not always have access to an easy closed-form expected value equation. Monte-Carlo methods gets us close to its solution 
+
 // Letting N being number of Monte-Carlo epochs
 // This needs to use the fundamental Brownian motion equation which the Black-Scholes-Merton equation finds the closed form expectation of
 // Monte-Carlo methods just abuses the Law of Large Numbers
@@ -55,8 +77,8 @@ double monteCarloCall(double S, double K, double r, double T, double sigma, int 
     
     // Generates Z values
     std::random_device rd;
-    std::mt19937 gen(rd());                                                 // 'Mersenne Twister' apparently good
-    std::normal_distribution<double> dist(0, 1);                            // Holy acrobatics
+    std::mt19937 gen(rd());                                                 // 'Mersenne Twister' randomiser, apparently good
+    std::normal_distribution<double> dist(0, 1);                            // Yapper
     
     // Variables for compute with Z, reduce power of the for loop
     double outerMult = S*std::exp((r - (sigma*sigma/2))*T);                 // This optimises into a number, far easier compute overall
@@ -72,16 +94,123 @@ double monteCarloCall(double S, double K, double r, double T, double sigma, int 
     return call;
 }
 
+// =========================================
+// Multithreading for speed and accuracy
+// =========================================
+
+// Increase the accuracy of Monte-Carlo while keeping the compute time the same (or even increase the compute time for drastically better accuracy)
+
+// Now, we attempt the above but with use of multithreading.
+// The idea: Increasing epochs N increases accuracy at the cost of compute time
+//           Smaller number of epochs = Faster Compute
+//           What if we do a smaller number of epochs many times at once and combine that to effectively get many epochs? 
+//           A simple concept, the improvement is likely amazing
+
+// Architecture:
+// each thread completes N/thread_count epochs, creating their own partial cumulative sum
+// join worker threads, then process finishes in the same way as before - divide cumulative sum by N, then discount it to get your answer
+
+// This could be redone even easier by simply reusing monteCarloCall and taking an average of each thread's Monte Carlo. 
+// In fact the difference in speed should be negligible I might test that
+double threadPoolMonteCarlo(double S, double K, double r, double T, double sigma, int N){
+    
+    double accum = 0.0; 
+    double call;
+
+    unsigned int numThreads = std::thread::hardware_concurrency();  // Draw threads from available hardware
+    std::vector<double> partials(numThreads, 0.0);                  // Initialise a vector with length numThreads, set each index to 0.0
+    std::vector<std::thread> workers;                               // Start a thread vector
+    std::cout << "There are " << numThreads << " threads available" << std::endl;
+
+    int chunkSize = N / numThreads;
+
+    // These will remain the same for every thread computation
+    double outerMult = S*std::exp((r - (sigma*sigma/2))*T);                 
+    double innerMult = sigma*std::sqrt(T);                                  
+
+    // Worker logic
+    for(unsigned int t = 0; t < numThreads; t++){
+
+        workers.push_back(std::thread([&, t]() {
+            std::random_device rd;
+            std::mt19937 gen(rd());                                                 
+            std::normal_distribution<double> dist(0, 1);                           
+    
+            double p_accum = 0.0;
+
+            for (int i = 0; i < chunkSize; i++) {
+                double Z = dist(gen);
+                p_accum += std::fmax(outerMult*std::exp(innerMult*Z) - K, 0);
+            }
+
+            partials[t] = p_accum;                  // Remember this is self contained
+                                                    // each thread will create an instance of partials as partials[i] = 0.0 for i != t and partials[t] = accum 
+        }));
+
+    }
+
+    // Join the processes, complete the partials vector to have each cumulative sum
+    for (auto& worker : workers) {
+        worker.join();
+    }
+
+    // Join the partial sums
+    for (auto& partial : partials) {
+        accum += partial;
+    }
+
+    // Return the call option price
+    call = std::exp(-r * T)*(accum/N);
+    return call;
+
+}
+
+// ==========================================
+// Main, printing output and presenting error
+// ==========================================
+
 int main() {
+    // For displaying time performance
+    using std::chrono::high_resolution_clock;
+    using std::chrono::duration_cast;
+    using std::chrono::duration;
+    using std::chrono::milliseconds;
+
     // Configurable inputs
     double S = 1; double K = 1; double r = 1; double T = 1; double sigma = 1; 
-    //int N = 100000; 
+    int N = 100000000; 
 
-    std::cout << "The Black-Scholes-Merton output of this configuration is: " << BlackScholesMertonCall(S,K,r,T,sigma) << std::endl;
-    //std::cout << "The Monte-Carlo output of this configuration over " << N << " epochs is: " << monteCarloCall(S,K,r,T,sigma, N) << std::endl;
-    std::cout << "The Monte-Carlo output of this configuration over 1000 epochs is: " << monteCarloCall(S, K, r, T, sigma, 1000) << "\n";
-    std::cout << "The Monte-Carlo output of this configuration over 10000 epochs is: " << monteCarloCall(S, K, r, T, sigma, 10000) << "\n";
-    std::cout << "The Monte-Carlo output of this configuration over 100000 epochs is: " << monteCarloCall(S, K, r, T, sigma, 100000) << "\n";
-    std::cout << "The Monte-Carlo output of this configuration over 1000000 epochs is: " << monteCarloCall(S, K, r, T, sigma, 1000000) << "\n";
+    // Computing values, their compute times and error
+    auto BSMs  = high_resolution_clock::now();
+    double BSM = BlackScholesMertonCall(S,K,r,T,sigma);
+    auto BSMf  = high_resolution_clock::now();
+    auto ms1 = duration_cast<milliseconds>(BSMf - BSMs);
+
+    auto MCMs  = high_resolution_clock::now();
+    double MCM = monteCarloCall(S,K,r,T,sigma, N);
+    auto MCMf  = high_resolution_clock::now();
+    auto ms2   = duration_cast<milliseconds>(MCMf - MCMs);
+    double acc1 = std::abs(BSM - MCM);
+
+    auto TPMCMs  = high_resolution_clock::now();
+    double TPMCM = threadPoolMonteCarlo(S,K,r,T,sigma, N);
+    auto TPMCMf  = high_resolution_clock::now();
+    auto ms3     = duration_cast<milliseconds>(TPMCMf - TPMCMs);
+    double acc2  = std::abs(BSM - TPMCM);
+
+    std::cout << "The Black-Scholes-Merton output of this configuration is: " << BSM << " in " << ms1.count() << "ms\n";
+    std::cout << "The Monte-Carlo output of this configuration over " << N << " epochs is: " << MCM << " in " << ms2.count() << "ms [Error = " << acc1 << "]\n";
+    std::cout << "The TP Monte-Carlo output of this configuration over " << N << " epochs is: " << TPMCM << " in " << ms3.count() << "ms [Error = " << acc2 << "]\n";
+    
+    /* Getting number of milliseconds as a double. */
+    // duration<double, std::milli> ms_double = t2 - t1;
+
     return 0;
 }
+
+
+// Other stuff
+    //std::cout << "The Monte-Carlo output of this configuration over 1000 epochs is: " << monteCarloCall(S, K, r, T, sigma, 1000) << "\n";
+    //std::cout << "The Monte-Carlo output of this configuration over 10000 epochs is: " << monteCarloCall(S, K, r, T, sigma, 10000) << "\n";
+    //std::cout << "The Monte-Carlo output of this configuration over 100000 epochs is: " << monteCarloCall(S, K, r, T, sigma, 100000) << "\n";
+    //std::cout << "The Monte-Carlo output of this configuration over 1000000 epochs is: " << monteCarloCall(S, K, r, T, sigma, 1000000) << "\n";
